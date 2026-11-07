@@ -1,0 +1,10 @@
+target/
+*.class
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Local secrets. Never commit. Use .env.example as the template.
+.env
+__pycache__/

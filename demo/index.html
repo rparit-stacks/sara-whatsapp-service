@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Sara - WhatsApp message demo</title>
+<link rel="icon" href="/logo.png">
+<style>
+  :root { --bg:#faf7f2; --card:#fff; --ink:#1d1b19; --muted:#6b645c; --accent:#25a244; --line:#e6dfd5; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161412; --card:#201d1a; --ink:#f3eee7; --muted:#a39a8f; --line:#38332d; } }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width:720px; margin:0 auto; padding:32px 16px; }
+  .brand { display:inline-block; background:#fff; border-radius:12px; padding:2px 10px; margin-bottom:14px; }
+  .brand img { display:block; height:64px; width:auto; }
+  h1 { font-size:26px; margin:0 0 4px; }
+  p.sub { color:var(--muted); margin:0 0 24px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:16px; }
+  label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
+  input { width:100%; box-sizing:border-box; font-size:16px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:transparent; color:var(--ink); }
+  button { margin-top:14px; font-size:16px; padding:10px 18px; border:0; border-radius:10px; background:var(--accent); color:#fff; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:wait; }
+  pre { margin:0; padding:12px; border-radius:10px; background:rgba(127,127,127,.12); overflow:auto; font-size:13px; white-space:pre-wrap; word-break:break-word; }
+  .row { display:flex; gap:12px; align-items:center; }
+  .badge { font-size:12px; padding:3px 8px; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
+  .ok { color:var(--accent); border-color:var(--accent); }
+  .bad { color:#c0392b; border-color:#c0392b; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand"><img src="/logo.png" alt="Studio Sara"></div>
+  <h1>WhatsApp message demo</h1>
+  <p class="sub">Send a WhatsApp template message through the WhatsApp Cloud API.<br>App: <strong>StudioSara WA API</strong> (App ID 2967544970272259)</p>
+
+  <div class="card">
+    <label for="to">Recipient WhatsApp number (country code, digits only)</label>
+    <input id="to" inputmode="numeric" placeholder="919876543210" autocomplete="off">
+    <button id="send">Send message</button>
+  </div>
+
+  <div class="card">
+    <div class="row"><strong>Request sent to the Cloud API</strong><span id="status" class="badge">waiting</span></div>
+    <pre id="request">Nothing sent yet.</pre>
+  </div>
+
+  <div class="card">
+    <strong>Response from the Cloud API</strong>
+    <pre id="response">Nothing sent yet.</pre>
+  </div>
+</main>
+<script>
+  const sendButton = document.getElementById('send');
+  const statusBadge = document.getElementById('status');
+  sendButton.addEventListener('click', async () => {
+    const to = document.getElementById('to').value;
+    sendButton.disabled = true;
+    statusBadge.textContent = 'sending'; statusBadge.className = 'badge';
+    try {
+      const res = await fetch('/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }) });
+      const data = await res.json();
+      if (data.request) {
+        document.getElementById('request').textContent =
+          'POST ' + data.request.url + '\n\n' + JSON.stringify(data.request.body, null, 2);
+        document.getElementById('response').textContent = 'HTTP ' + data.status + '\n\n' + JSON.stringify(data.response, null, 2);
+        const ok = data.status >= 200 && data.status < 300;
+        statusBadge.textContent = ok ? 'accepted by WhatsApp' : 'rejected';
+        statusBadge.className = 'badge ' + (ok ? 'ok' : 'bad');
+      } else {
+        document.getElementById('response').textContent = JSON.stringify(data, null, 2);
+        statusBadge.textContent = 'not sent'; statusBadge.className = 'badge bad';
+      }
+    } catch (e) {
+      document.getElementById('response').textContent = String(e);
+      statusBadge.textContent = 'error'; statusBadge.className = 'badge bad';
+    } finally {
+      sendButton.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

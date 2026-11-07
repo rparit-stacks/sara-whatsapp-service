@@ -1,0 +1,78 @@
+package com.sara.whatsapp.config;
+
+import lombok.Getter;
+import lombok.Setter;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+@Getter
+@Setter
+@ConfigurationProperties(prefix = "whatsapp")
+public class WhatsAppProperties {
+
+    /** Active provider when nothing has been chosen through the API (META or DOUBLETICK). */
+    private String provider = "META";
+    private String defaultCountryCode = "91";
+    /** Base64 AES key (16/24/32 bytes) used for secrets stored in the database. */
+    private String encryptionKey = "";
+    /** Protects /v1/admin/**. */
+    private String adminApiKey = "";
+    /** A reply that is exactly one of these (any case) opts the sender out. */
+    private java.util.List<String> optOutKeywords = java.util.List.of("STOP", "STOPALL", "UNSUBSCRIBE", "OPTOUT");
+
+    private Meta meta = new Meta();
+    private Send send = new Send();
+    private Events events = new Events();
+    private Broadcast broadcast = new Broadcast();
+    private Usage usage = new Usage();
+
+    @Getter
+    @Setter
+    public static class Meta {
+        private String baseUrl = "https://graph.facebook.com";
+        private String graphVersion = "v24.0";
+        private String wabaId = "";
+        private String phoneNumberId = "";
+        private String accessToken = "";
+        private String appSecret = "";
+        private String appId = "";
+        private String webhookVerifyToken = "";
+        /** Opened by the "billing link" endpoint. Set it to your WhatsApp billing page. */
+        private String billingUrl = "https://business.facebook.com/billing_hub/";
+    }
+
+    @Getter
+    @Setter
+    public static class Send {
+        private int concurrency = 8;
+        private int leaseSeconds = 60;
+        private int maxAttempts = 5;
+        private int baseBackoffSeconds = 10;
+        private int maxBackoffSeconds = 1800;
+    }
+
+    @Getter
+    @Setter
+    public static class Broadcast {
+        /**
+         * Unique recipients a broadcast may start within a rolling 24 hours. Set it to your Meta
+         * messaging limit (a new account starts at 250). Broadcasts wait for room, they do not fail.
+         */
+        private int dailyLimit = 250;
+        private int chunkSize = 200;
+    }
+
+    @Getter
+    @Setter
+    public static class Usage {
+        /** Month boundaries for the usage report. */
+        private String zone = "Asia/Kolkata";
+    }
+
+    @Getter
+    @Setter
+    public static class Events {
+        private int maxAttempts = 8;
+        private int baseBackoffSeconds = 10;
+        private int maxBackoffSeconds = 3600;
+    }
+}
