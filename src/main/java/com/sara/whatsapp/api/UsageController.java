@@ -21,11 +21,19 @@ public class UsageController {
         this.service = service;
     }
 
-    /** Delivered messages and the estimated cost for a month (default: this month). */
+    /** Delivered messages and the estimated cost for a month (default: this month), or for from/to dates (yyyy-MM-dd, inclusive). */
     @GetMapping
-    public Map<String, Object> month(HttpServletRequest http, @RequestParam(required = false) String month) {
+    public Map<String, Object> month(HttpServletRequest http, @RequestParam(required = false) String month,
+                                     @RequestParam(required = false) String from, @RequestParam(required = false) String to) {
         ApiAuth.require(http, ApiClient.SCOPE_READ);
-        return service.month(month);
+        return service.report(month, from, to);
+    }
+
+    /** Meta's rate card and how billing works. */
+    @GetMapping("/rates")
+    public Map<String, Object> rates(HttpServletRequest http) {
+        ApiAuth.require(http, ApiClient.SCOPE_READ);
+        return service.rates();
     }
 
     /** Where to see Meta's own billing. */

@@ -66,6 +66,8 @@ public class WhatsAppProperties {
     public static class Usage {
         /** Month boundaries for the usage report. */
         private String zone = "Asia/Kolkata";
+        /** GST added to Meta's rates in the estimate. Meta's rate card is quoted before tax. */
+        private double gstPercent = 18;
     }
 
     @Getter

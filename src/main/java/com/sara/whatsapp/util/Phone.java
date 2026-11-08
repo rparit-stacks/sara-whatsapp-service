@@ -35,17 +35,20 @@ public final class Phone {
         return Optional.of(digits);
     }
 
+    /** Calling codes the spend estimate knows, longest first so "971" is tried before "97" or "9". */
+    private static final java.util.List<String> CODES = java.util.stream.Stream.concat(
+                    com.sara.whatsapp.service.MetaRates.callingCodes().stream(), java.util.stream.Stream.of("86"))
+            .distinct().sorted(java.util.Comparator.comparingInt(String::length).reversed()).toList();
+
     /**
-     * Country calling code of an E.164 number, from a small table of common codes.
+     * Country calling code of an E.164 number, from the codes in Meta's rate card.
      * Returns null when it cannot be told. Used only for spend estimates.
      */
     public static String countryCode(String e164Digits) {
         if (e164Digits == null) {
             return null;
         }
-        for (String code : new String[] {
-                "971", "966", "880", "977", "94", "92", "91", "86", "65", "61", "60", "49", "44", "39", "34", "33",
-                "27", "81", "82", "7", "1"}) {
+        for (String code : CODES) {
             if (e164Digits.startsWith(code)) {
                 return code;
             }
