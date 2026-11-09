@@ -45,6 +45,14 @@ public class BotController {
         return out;
     }
 
+    /** Asks the backend about the bot's licence right now, so switching it on or off takes effect at once instead of at the next check. */
+    @PostMapping("/licence/refresh")
+    public Map<String, Object> refreshLicence(HttpServletRequest http) {
+        ApiAuth.require(http, ApiClient.SCOPE_TEMPLATES);
+        licence.refresh();
+        return Map.of("live", licence.isLive());
+    }
+
     @PutMapping("/flow/draft")
     public Map<String, Object> saveDraft(HttpServletRequest http, @RequestBody JsonNode body) {
         ApiClient client = ApiAuth.require(http, ApiClient.SCOPE_TEMPLATES);
