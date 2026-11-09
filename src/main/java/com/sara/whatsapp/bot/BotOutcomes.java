@@ -28,6 +28,11 @@ public final class BotOutcomes {
         return base.replaceAll("/+$", "") + (path != null && BotCatalog.APP_PAGES.containsKey(path) ? path : "/ask");
     }
 
+    /** A plain-text reply the AI wrote (already checked by the backend). The fixed wording is used when there is none. */
+    public static Rendered written(String text) {
+        return new Rendered(SessionPayloads.text(text));
+    }
+
     public static Rendered menu(String name) {
         return new Rendered(SessionPayloads.replyButtons("Hi " + name + ", welcome to Studio Sara. How can we help you today? Tap an option below to continue.",
                 List.of("Track my order", "Get a quote", "Chat in the app")));

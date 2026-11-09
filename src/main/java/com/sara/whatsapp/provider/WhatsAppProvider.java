@@ -25,5 +25,12 @@ public interface WhatsAppProvider {
         return SendResult.permanent("UNSUPPORTED", "This provider cannot send free-form messages");
     }
 
+    /**
+     * Shows "typing…" to the customer and marks their message as read. It lasts until a reply is sent or about 25 seconds.
+     * Best effort: a provider that cannot do it, or a failure, changes nothing.
+     */
+    default void showTyping(String inboundMessageId) {
+    }
+
     HealthStatus health();
 }

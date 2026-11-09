@@ -109,7 +109,7 @@ public class InboundService {
             if (!optOut) {
                 // The bot answers while its licence is live and a flow is published; otherwise the older no-reply notice applies.
                 if (bot.isActive()) {
-                    bot.submit(from, name, text, newCustomer);
+                    bot.submit(from, name, text, newCustomer, id);
                 } else {
                     autoReply.replyTo(from);
                 }

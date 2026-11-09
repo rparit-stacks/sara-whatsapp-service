@@ -50,6 +50,15 @@ public class SessionSender {
         this.props = props;
     }
 
+    /** Shows "typing…" on the customer's chat for the message they just sent. Best effort, never throws. */
+    public void typing(String inboundMessageId) {
+        try {
+            providers.active().showTyping(inboundMessageId);
+        } catch (RuntimeException e) {
+            log.debug("Typing indicator skipped: {}", e.getMessage());
+        }
+    }
+
     /** @param outcome the id of the outcome that produced this message, kept in the log for reporting. */
     public Result send(String phone, Map<String, Object> payload, String outcome) {
         Instant now = Instant.now();

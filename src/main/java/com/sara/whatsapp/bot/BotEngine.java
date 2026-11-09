@@ -65,8 +65,16 @@ public class BotEngine {
 
     /** Hands a message to the bot without holding up the webhook. */
     public void submit(String phone, String profileName, String text, boolean newCustomer) {
+        submit(phone, profileName, text, newCustomer, null);
+    }
+
+    /** @param inboundMessageId the customer's message id, used to show "typing…" while the bot works. */
+    public void submit(String phone, String profileName, String text, boolean newCustomer, String inboundMessageId) {
         pool.submit(() -> {
             try {
+                if (inboundMessageId != null) {
+                    sender.typing(inboundMessageId);
+                }
                 handle(phone, profileName, text, newCustomer);
             } catch (Exception e) {
                 log.warn("Bot failed on a message from {}: {}", phone, e.toString());
@@ -152,8 +160,15 @@ public class BotEngine {
                             // No answer (AI off, capped or unsure): send them to the app, which is the safe thing to do.
                             r = a.isBlank() ? BotOutcomes.openApp(name, "/ask", base) : BotOutcomes.answer(name, a);
                         }
-                        case "ask_details" -> r = BotOutcomes.askDetails(name, d.path("need").asText(BotCatalog.NEEDS.get(0)));
-                        case "confirm" -> r = BotOutcomes.confirm(name);
+                        case "ask_details" -> {
+                            String need = d.path("need").asText(BotCatalog.NEEDS.get(0));
+                            String c = backend.compose("ask_details", name, need, text);
+                            r = c.isBlank() ? BotOutcomes.askDetails(name, need) : BotOutcomes.written(c);
+                        }
+                        case "confirm" -> {
+                            String c = backend.compose("confirm", name, "", text);
+                            r = c.isBlank() ? BotOutcomes.confirm(name) : BotOutcomes.written(c);
+                        }
                         case "feedback" -> r = BotOutcomes.feedback(name);
                         case "handover" -> {
                             backend.notifyTeam(phone, text);

@@ -62,6 +62,30 @@ public class MetaCloudProvider implements WhatsAppProvider {
         return post(payload, callbackId);
     }
 
+    @Override
+    public void showTyping(String inboundMessageId) {
+        if (isBlank(inboundMessageId) || isBlank(meta.getAccessToken()) || isBlank(meta.getPhoneNumberId())) {
+            return;
+        }
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("messaging_product", "whatsapp");
+            payload.put("status", "read");
+            payload.put("message_id", inboundMessageId);
+            payload.put("typing_indicator", Map.of("type", "text"));
+            client.post()
+                    .uri(meta.getBaseUrl() + "/" + meta.getGraphVersion() + "/" + meta.getPhoneNumberId() + "/messages")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + meta.getAccessToken())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payload)
+                    .retrieve()
+                    .onStatus(status -> true, (request, resp) -> { })
+                    .toBodilessEntity();
+        } catch (Exception e) {
+            log.debug("Typing indicator not shown: {}", e.getMessage());
+        }
+    }
+
     private SendResult post(Map<String, Object> payload, String logId) {
         if (isBlank(meta.getAccessToken()) || isBlank(meta.getPhoneNumberId())) {
             return SendResult.permanent("NOT_CONFIGURED", "Meta access token or phone number id is not set");

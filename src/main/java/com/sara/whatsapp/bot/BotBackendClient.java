@@ -82,6 +82,22 @@ public class BotBackendClient {
         }
     }
 
+    /** AI wording for the two plain-text replies, in the customer's language. Empty means use the fixed wording. */
+    public String compose(String intent, String name, String need, String message) {
+        if (!configured()) {
+            return "";
+        }
+        try {
+            String body = client.post().uri(url("/api/bot/compose")).header("X-Bot-Secret", bot.getSharedSecret())
+                    .body(Map.of("intent", intent, "name", name == null ? "" : name, "need", need == null ? "" : need, "message", message == null ? "" : message))
+                    .retrieve().body(String.class);
+            return mapper.readTree(body).path("text").asText("").strip();
+        } catch (Exception e) {
+            log.warn("Bot compose call failed: {}", e.getMessage());
+            return "";
+        }
+    }
+
     public OrderStatus orderStatus(String phone) {
         if (!configured()) {
             return new OrderStatus(false, null, null, null);
