@@ -69,12 +69,17 @@ public class BotBackendClient {
     }
 
     public String answer(String question, List<String> scopes) {
+        return answer(question, scopes, List.of());
+    }
+
+    /** @param history the last few "Q: ..." and "A: ..." lines of this chat, so a follow-up question makes sense. */
+    public String answer(String question, List<String> scopes, List<String> history) {
         if (!configured()) {
             return "";
         }
         try {
             String body = client.post().uri(url("/api/bot/answer")).header("X-Bot-Secret", bot.getSharedSecret())
-                    .body(Map.of("question", question, "scopes", scopes)).retrieve().body(String.class);
+                    .body(Map.of("question", question, "scopes", scopes, "history", history == null ? List.of() : history)).retrieve().body(String.class);
             return mapper.readTree(body).path("text").asText("");
         } catch (Exception e) {
             log.warn("Bot answer call failed: {}", e.getMessage());

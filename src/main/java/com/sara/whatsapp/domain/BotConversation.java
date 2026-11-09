@@ -26,4 +26,10 @@ public class BotConversation {
     private int aiCalls;
     /** While in the future, a person has the chat and the bot stays quiet. */
     private Instant humanUntil;
+    /** "Let AI handle from here": while aiUntil is in the future the AI answers this customer's messages, on these topics. */
+    private java.util.List<String> aiScopes;
+    private Instant aiUntil;
+    private int aiReplies;
+    /** The last few lines of the AI chat (Q: / A: pairs), so a follow-up question makes sense. */
+    private java.util.List<String> aiTurns;
 }

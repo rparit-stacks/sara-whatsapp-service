@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
 
 /** Per-customer chat state: the 24-hour window, the daily caps, and "a person has this chat". */
 @Service
@@ -50,6 +51,38 @@ public class BotConversationService {
 
     public boolean botPaused(String phone, Instant now) {
         return repository.findById(phone).map(c -> c.getHumanUntil() != null && c.getHumanUntil().isAfter(now)).orElse(false);
+    }
+
+    /** An AI chat in progress for one customer. */
+    public record AiChat(List<String> scopes, int replies, List<String> turns) {
+    }
+
+    public java.util.Optional<AiChat> aiChat(String phone, Instant now) {
+        return repository.findById(phone)
+                .filter(c -> c.getAiUntil() != null && c.getAiUntil().isAfter(now) && c.getAiScopes() != null && !c.getAiScopes().isEmpty())
+                .map(c -> new AiChat(c.getAiScopes(), c.getAiReplies(), c.getAiTurns() == null ? List.of() : c.getAiTurns()));
+    }
+
+    public void startAiChat(String phone, List<String> scopes, Instant until) {
+        mongo.upsert(Query.query(Criteria.where("_id").is(phone)),
+                new Update().set("aiScopes", scopes).set("aiUntil", until).set("aiReplies", 0).set("aiTurns", List.of()), BotConversation.class);
+    }
+
+    /** Keeps the last three exchanges, counts the reply, and pushes the idle timeout out again. */
+    public void recordAiTurn(String phone, String question, String answer, Instant until) {
+        mongo.upsert(Query.query(Criteria.where("_id").is(phone)),
+                new Update().push("aiTurns").slice(-6).each("Q: " + clip(question), "A: " + clip(answer)).inc("aiReplies", 1).set("aiUntil", until),
+                BotConversation.class);
+    }
+
+    public void endAiChat(String phone) {
+        mongo.upsert(Query.query(Criteria.where("_id").is(phone)),
+                new Update().unset("aiUntil").unset("aiScopes").unset("aiTurns").set("aiReplies", 0), BotConversation.class);
+    }
+
+    private static String clip(String s) {
+        String t = s == null ? "" : s.replaceAll("\\s+", " ").strip();
+        return t.length() > 300 ? t.substring(0, 300) : t;
     }
 
     public void pauseBot(String phone, Instant until) {

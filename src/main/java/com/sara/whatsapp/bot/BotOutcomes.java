@@ -33,6 +33,11 @@ public final class BotOutcomes {
         return new Rendered(SessionPayloads.text(text));
     }
 
+    /** One reply in an AI chat: the AI's own words, free text, with a way back to the menu. */
+    public static Rendered chat(String text) {
+        return new Rendered(SessionPayloads.replyButtons(text, List.of("Main menu")));
+    }
+
     public static Rendered menu(String name) {
         return new Rendered(SessionPayloads.replyButtons("Hi " + name + ", welcome to Studio Sara. How can we help you today? Tap an option below to continue.",
                 List.of("Track my order", "Get a quote", "Chat in the app")));

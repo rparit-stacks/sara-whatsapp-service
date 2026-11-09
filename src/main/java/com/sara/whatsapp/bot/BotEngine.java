@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -88,6 +89,14 @@ public class BotEngine {
         if (!licence.isLive() || flow == null) {
             return 0;
         }
+        // "Let AI handle from here": while it is running, the AI answers every message itself, until the customer asks for the menu.
+        Optional<BotConversationService.AiChat> chat = conversations.aiChat(phone, Instant.now());
+        if (chat != null && chat.isPresent()) {
+            if (!leavesAiChat(text)) {
+                return aiChatTurn(phone, BotOutcomes.firstName(profileName), text, chat.get());
+            }
+            conversations.endAiChat(phone);
+        }
         Map<String, JsonNode> nodes = new HashMap<>();
         flow.path("nodes").forEach(n -> nodes.put(n.path("id").asText(), n));
         Map<String, List<JsonNode>> bySource = new HashMap<>();
@@ -143,6 +152,8 @@ public class BotEngine {
                 case "outcome": {
                     String outcomeId = d.path("outcomeId").asText();
                     String handle = "out";
+                    List<String> aiScopes = null;
+                    String aiAnswer = null;
                     BotOutcomes.Rendered r;
                     String base = bot.getDeepLinkBase();
                     switch (outcomeId) {
@@ -159,6 +170,18 @@ public class BotEngine {
                             String a = backend.answer(text, scopes);
                             // No answer (AI off, capped or unsure): send them to the app, which is the safe thing to do.
                             r = a.isBlank() ? BotOutcomes.openApp(name, "/ask", base) : BotOutcomes.answer(name, a);
+                        }
+                        case "ai_chat" -> {
+                            List<String> scopes = new ArrayList<>();
+                            d.path("scopes").forEach(x -> scopes.add(x.asText()));
+                            String a = conversations.reserveAiCall(phone, bot.getDailyAiCap()) ? backend.answer(text, scopes, List.of()) : "";
+                            if (a.isBlank()) {
+                                r = BotOutcomes.openApp(name, "/ask", base); // the AI could not help: the app can, and it is free
+                            } else {
+                                r = BotOutcomes.chat(a);
+                                aiScopes = scopes;
+                                aiAnswer = a;
+                            }
                         }
                         case "ask_details" -> {
                             String need = d.path("need").asText(BotCatalog.NEEDS.get(0));
@@ -185,6 +208,11 @@ public class BotEngine {
                         return; // a closed window, an opt-out, a cap or a failure: do not carry on
                     }
                     sent[0]++;
+                    if (aiScopes != null) {
+                        Instant until = Instant.now().plus(java.time.Duration.ofMinutes(Math.max(1, bot.getAiChatMinutes())));
+                        conversations.startAiChat(phone, aiScopes, until);
+                        conversations.recordAiTurn(phone, text, aiAnswer, until);
+                    }
                     id = next(bySource, id, handle);
                     break;
                 }
@@ -204,6 +232,32 @@ public class BotEngine {
             case "SAT" -> DayOfWeek.SATURDAY;
             default -> DayOfWeek.SUNDAY;
         };
+    }
+
+    /** A button tap or "menu" ends the AI chat and goes back to the normal flow. */
+    private static boolean leavesAiChat(String text) {
+        String t = text == null ? "" : text.trim();
+        return t.equalsIgnoreCase("menu") || t.equalsIgnoreCase("stop") || BotCatalog.TAPS.stream().anyMatch(t::equalsIgnoreCase);
+    }
+
+    /** One message inside an AI chat. When the AI is unsure, or limits are reached, the chat moves to the app or to the team. */
+    private int aiChatTurn(String phone, String name, String text, BotConversationService.AiChat chat) {
+        String base = bot.getDeepLinkBase();
+        if (chat.replies() >= bot.getAiChatMaxReplies() || !conversations.reserveAiCall(phone, bot.getDailyAiCap())) {
+            conversations.endAiChat(phone);
+            return sender.send(phone, BotOutcomes.openApp(name, "/ask", base).payload(), "ai_chat").sent() ? 1 : 0;
+        }
+        String a = backend.answer(text, chat.scopes(), chat.turns());
+        if (a.isBlank()) {
+            backend.notifyTeam(phone, text);
+            conversations.endAiChat(phone);
+            return sender.send(phone, BotOutcomes.handover(name, base).payload(), "handover").sent() ? 1 : 0;
+        }
+        if (!sender.send(phone, BotOutcomes.chat(a).payload(), "ai_chat").sent()) {
+            return 0;
+        }
+        conversations.recordAiTurn(phone, text, a, Instant.now().plus(java.time.Duration.ofMinutes(Math.max(1, bot.getAiChatMinutes()))));
+        return 1;
     }
 
     boolean withinBusinessHours() {

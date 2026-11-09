@@ -32,6 +32,7 @@ public final class BotCatalog {
             new Outcome("order_status", "Share the order status", List.of(), List.of(new Output("found", "Order found"), new Output("none", "No order")), "ai_order_status"),
             new Outcome("open_app", "Send them to the app", List.of("appPage"), List.of(out()), "ai_info_link"),
             new Outcome("answer", "Answer from our knowledge", List.of("scopes"), List.of(out()), "ai_info_text"),
+            new Outcome("ai_chat", "Let AI handle from here", List.of("scopes"), List.of(), "ai_info_text"),
             new Outcome("ask_details", "Ask for more details", List.of("need"), List.of(out()), "ai_design_needs_info"),
             new Outcome("confirm", "Confirm we got their request", List.of(), List.of(out()), "ai_ticket_created"),
             new Outcome("feedback", "Ask how it went", List.of(), List.of(new Output("loved", "Loved it"), new Output("okay", "It was okay"), new Output("unhappy", "Not happy")), "ai_feedback_request"),

@@ -101,6 +101,9 @@ public class WhatsAppProperties {
         private String businessDays = "MON,TUE,WED,THU,FRI,SAT";
         /** The most messages the bot sends in answer to one incoming message. */
         private int maxMessagesPerInbound = 4;
+        /** "Let AI handle from here": how long the AI keeps the chat after the customer's last message, and its most replies in one go. */
+        private int aiChatMinutes = 30;
+        private int aiChatMaxReplies = 10;
     }
 
     @Getter
