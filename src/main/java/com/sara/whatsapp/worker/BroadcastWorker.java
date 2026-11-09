@@ -20,14 +20,24 @@ public class BroadcastWorker {
         this.service = service;
     }
 
-    @Scheduled(fixedDelay = 3000)
+    /** With nothing running or due, the database is asked again every five seconds; while a broadcast runs, about every three. */
+    private static final long IDLE_MS = 5000;
+    private static final long BUSY_MS = 2000;
+    private volatile long pollAfter = 0;
+
+    @Scheduled(fixedDelay = 1000)
     public void tick() {
+        if (System.currentTimeMillis() < pollAfter) {
+            return;
+        }
         service.startDue();
+        boolean worked = false;
         for (int i = 0; i < PER_TICK; i++) {
             Broadcast broadcast = service.claimRunning();
             if (broadcast == null) {
-                return;
+                break;
             }
+            worked = true;
             try {
                 if (!broadcast.isExpansionDone()) {
                     service.expandNext(broadcast);
@@ -39,5 +49,6 @@ public class BroadcastWorker {
                 service.release(broadcast.getId());
             }
         }
+        pollAfter = System.currentTimeMillis() + (worked ? BUSY_MS : IDLE_MS);
     }
 }

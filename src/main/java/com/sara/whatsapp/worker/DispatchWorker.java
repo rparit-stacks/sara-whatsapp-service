@@ -59,12 +59,20 @@ public class DispatchWorker {
         this.permits = new Semaphore(Math.max(1, config.getConcurrency()));
     }
 
+    /** When the queue is empty the database is asked again only every two seconds, not twice a second. */
+    private static final long IDLE_MS = 2000;
+    private volatile long pollAfter = 0;
+
     @Scheduled(fixedDelay = 500)
     public void tick() {
+        if (System.currentTimeMillis() < pollAfter) {
+            return;
+        }
         while (permits.tryAcquire()) {
             Message message = claim();
             if (message == null) {
                 permits.release();
+                pollAfter = System.currentTimeMillis() + IDLE_MS;
                 return;
             }
             executor.submit(() -> {

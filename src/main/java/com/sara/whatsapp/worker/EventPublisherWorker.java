@@ -56,17 +56,33 @@ public class EventPublisherWorker {
         this.http = RestClient.builder().requestFactory(factory).build();
     }
 
+    /** With no events waiting, the database is asked again every five seconds; stuck events are freed every 30. */
+    private static final long IDLE_MS = 5000;
+    private static final long LEASE_CHECK_MS = 30_000;
+    private volatile long pollAfter = 0;
+    private volatile long leaseCheckAfter = 0;
+
     @Scheduled(fixedDelay = 2000)
     public void tick() {
+        long clock = System.currentTimeMillis();
+        if (clock < pollAfter) {
+            return;
+        }
         Instant now = Instant.now();
-        mongo.updateMulti(
-                new Query(Criteria.where("status").is(OutboundEvent.Status.SENDING).and("lockedUntil").lt(now)),
-                new Update().set("status", OutboundEvent.Status.PENDING).set("nextAttemptAt", now).unset("lockedUntil"),
-                OutboundEvent.class);
+        if (clock >= leaseCheckAfter) {
+            leaseCheckAfter = clock + LEASE_CHECK_MS;
+            mongo.updateMulti(
+                    new Query(Criteria.where("status").is(OutboundEvent.Status.SENDING).and("lockedUntil").lt(now)),
+                    new Update().set("status", OutboundEvent.Status.PENDING).set("nextAttemptAt", now).unset("lockedUntil"),
+                    OutboundEvent.class);
+        }
 
         for (int i = 0; i < PER_TICK; i++) {
             OutboundEvent event = claim();
             if (event == null) {
+                if (i == 0) {
+                    pollAfter = System.currentTimeMillis() + IDLE_MS;
+                }
                 return;
             }
             deliver(event);
