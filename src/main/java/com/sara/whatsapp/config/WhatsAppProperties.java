@@ -24,6 +24,7 @@ public class WhatsAppProperties {
     private Events events = new Events();
     private Broadcast broadcast = new Broadcast();
     private Usage usage = new Usage();
+    private AutoReply autoReply = new AutoReply();
 
     @Getter
     @Setter
@@ -59,6 +60,15 @@ public class WhatsAppProperties {
          */
         private int dailyLimit = 250;
         private int chunkSize = 200;
+    }
+
+    @Getter
+    @Setter
+    public static class AutoReply {
+        /** Template (our key) sent to someone who writes to the number. Blank turns the auto-reply off. */
+        private String templateKey = "";
+        /** One auto-reply per sender in this many hours, however many messages they send. */
+        private int cooldownHours = 6;
     }
 
     @Getter

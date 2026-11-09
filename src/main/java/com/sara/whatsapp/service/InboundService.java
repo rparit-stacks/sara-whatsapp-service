@@ -12,6 +12,9 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -34,14 +37,18 @@ public class InboundService {
     private final ContactService contacts;
     private final ClientService clients;
     private final OutboundEventService outbound;
+    private final AutoReplyService autoReply;
+    private final MongoTemplate mongo;
     private final Set<String> optOutKeywords;
 
     public InboundService(InboundMessageRepository repository, ContactService contacts, ClientService clients,
-                          OutboundEventService outbound, WhatsAppProperties props) {
+                          OutboundEventService outbound, AutoReplyService autoReply, MongoTemplate mongo, WhatsAppProperties props) {
         this.repository = repository;
         this.contacts = contacts;
         this.clients = clients;
         this.outbound = outbound;
+        this.autoReply = autoReply;
+        this.mongo = mongo;
         this.optOutKeywords = props.getOptOutKeywords().stream()
                 .map(InboundService::canonical).collect(Collectors.toSet());
     }
@@ -88,12 +95,58 @@ public class InboundService {
                 }
             }
             notifyClients(message);
+            if (!optOut) {
+                autoReply.replyTo(from);
+            }
         }
     }
 
-    public Page<InboundMessage> list(String from, int page, int size) {
-        PageRequest pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100), Sort.by("receivedAt").descending());
-        return from == null || from.isBlank() ? repository.findAll(pageable) : repository.findByFrom(from.replaceAll("\\D", ""), pageable);
+    public record InboundFilter(String from, String q, String type, Boolean optedOut, Instant since, Instant until,
+                                String sort, String dir) {
+    }
+
+    public Page<InboundMessage> list(InboundFilter f, int page, int size) {
+        PageRequest pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100));
+        java.util.List<Criteria> all = new java.util.ArrayList<>();
+        if (f.from() != null && !f.from().isBlank()) {
+            String digits = f.from().replaceAll("\\D", "");
+            if (!digits.isEmpty()) {
+                all.add(Criteria.where("from").regex(java.util.regex.Pattern.quote(digits)));
+            }
+        }
+        if (f.q() != null && !f.q().isBlank()) {
+            String needle = java.util.regex.Pattern.quote(f.q().trim());
+            all.add(new Criteria().orOperator(
+                    Criteria.where("name").regex(needle, "i"),
+                    Criteria.where("text").regex(needle, "i"),
+                    Criteria.where("from").regex(needle)));
+        }
+        if (f.type() != null && !f.type().isBlank()) {
+            all.add(Criteria.where("type").is(f.type()));
+        }
+        if (f.optedOut() != null) {
+            all.add(Criteria.where("optedOut").is(f.optedOut()));
+        }
+        if (f.since() != null || f.until() != null) {
+            Criteria range = Criteria.where("receivedAt");
+            if (f.since() != null) range = range.gte(f.since());
+            if (f.until() != null) range = range.lt(f.until());
+            all.add(range);
+        }
+        Query query = new Query();
+        if (!all.isEmpty()) {
+            query.addCriteria(new Criteria().andOperator(all.toArray(new Criteria[0])));
+        }
+        long total = mongo.count(query, InboundMessage.class);
+        String field = switch (f.sort() == null ? "" : f.sort()) {
+            case "name" -> "name";
+            case "from" -> "from";
+            case "text" -> "text";
+            default -> "receivedAt";
+        };
+        Sort.Direction direction = "asc".equalsIgnoreCase(f.dir()) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        query.with(Sort.by(direction, field).and(Sort.by(Sort.Direction.DESC, "receivedAt"))).with(pageable);
+        return new org.springframework.data.domain.PageImpl<>(mongo.find(query, InboundMessage.class), pageable, total);
     }
 
     boolean isOptOut(String text) {
