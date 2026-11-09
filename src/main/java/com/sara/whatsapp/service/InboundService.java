@@ -38,16 +38,20 @@ public class InboundService {
     private final ClientService clients;
     private final OutboundEventService outbound;
     private final AutoReplyService autoReply;
+    private final com.sara.whatsapp.bot.BotConversationService conversations;
+    private final com.sara.whatsapp.bot.BotEngine bot;
     private final MongoTemplate mongo;
     private final Set<String> optOutKeywords;
 
     public InboundService(InboundMessageRepository repository, ContactService contacts, ClientService clients,
-                          OutboundEventService outbound, AutoReplyService autoReply, MongoTemplate mongo, WhatsAppProperties props) {
+                          OutboundEventService outbound, AutoReplyService autoReply, MongoTemplate mongo, com.sara.whatsapp.bot.BotConversationService conversations, com.sara.whatsapp.bot.BotEngine bot, WhatsAppProperties props) {
         this.repository = repository;
         this.contacts = contacts;
         this.clients = clients;
         this.outbound = outbound;
         this.autoReply = autoReply;
+        this.conversations = conversations;
+        this.bot = bot;
         this.mongo = mongo;
         this.optOutKeywords = props.getOptOutKeywords().stream()
                 .map(InboundService::canonical).collect(Collectors.toSet());
@@ -94,9 +98,21 @@ public class InboundService {
                     log.warn("Could not record the opt-out of {}: {}", from, e.getMessage());
                 }
             }
+            // Opens (or extends) the 24-hour window in which the bot may reply with free-form messages.
+            boolean newCustomer = false;
+            try {
+                newCustomer = conversations.onInbound(from, message.getReceivedAt());
+            } catch (RuntimeException e) {
+                log.warn("Could not record the conversation for {}: {}", from, e.getMessage());
+            }
             notifyClients(message);
             if (!optOut) {
-                autoReply.replyTo(from);
+                // The bot answers while its licence is live and a flow is published; otherwise the older no-reply notice applies.
+                if (bot.isActive()) {
+                    bot.submit(from, name, text, newCustomer);
+                } else {
+                    autoReply.replyTo(from);
+                }
             }
         }
     }

@@ -46,6 +46,12 @@ public final class UsageCalculator {
         if (country != null && rates.containsKey(category + ":" + country)) {
             return rates.get(category + ":" + country);
         }
-        return rates.get(category + ":*");
+        Double fallback = rates.get(category + ":*");
+        if (fallback == null && "SERVICE".equals(category)) {
+            // A free-form reply inside the 24-hour window is priced like a Utility message in every market of the
+            // 1 October 2026 card (Meta's "Service" column equals "Utility"), so use that when the stored card has no Service rates.
+            return rate(card, "UTILITY", country);
+        }
+        return fallback;
     }
 }

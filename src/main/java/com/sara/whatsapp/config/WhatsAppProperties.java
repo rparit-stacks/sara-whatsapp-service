@@ -25,6 +25,7 @@ public class WhatsAppProperties {
     private Broadcast broadcast = new Broadcast();
     private Usage usage = new Usage();
     private AutoReply autoReply = new AutoReply();
+    private Bot bot = new Bot();
 
     @Getter
     @Setter
@@ -69,6 +70,37 @@ public class WhatsAppProperties {
         private String templateKey = "";
         /** One auto-reply per sender in this many hours, however many messages they send. */
         private int cooldownHours = 6;
+    }
+
+    @Getter
+    @Setter
+    public static class Bot {
+        /** Master switch in this service. The Marketplace licence must also be live (see licenceRequired). */
+        private boolean enabled = true;
+        /** The backend that knows whether the bot's trial or purchase is valid. */
+        private String backendUrl = "https://studiosara.cloud";
+        /** Marketplace product key of the bot. */
+        private String productKey = "bot-whatsapp";
+        /** When false the licence check is skipped (local testing only). */
+        private boolean licenceRequired = true;
+        /** How long the last good licence answer is trusted if the backend cannot be reached. */
+        private int licenceGraceMinutes = 30;
+        /** Bot messages one customer can receive per day. */
+        private int dailyMessageCap = 40;
+        /** AI choices per customer per day. */
+        private int dailyAiCap = 20;
+        /** An AI choice below this confidence falls back to the safe app link. */
+        private double minConfidence = 0.55;
+        /** Where the "open the app" buttons go. */
+        private String deepLinkBase = "https://open.studiosara.in";
+        /** Sent to the backend in X-Bot-Secret. Must match the backend's bot.shared-secret. Blank = the bot cannot use AI, order lookup or team alerts. */
+        private String sharedSecret = "";
+        /** "Within business hours" conditions use these, in the usage zone (Asia/Kolkata). */
+        private String businessStart = "10:00";
+        private String businessEnd = "19:00";
+        private String businessDays = "MON,TUE,WED,THU,FRI,SAT";
+        /** The most messages the bot sends in answer to one incoming message. */
+        private int maxMessagesPerInbound = 4;
     }
 
     @Getter

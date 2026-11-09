@@ -19,6 +19,8 @@ import org.springframework.web.client.RestClient;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /** Sends template messages through the WhatsApp Cloud API of Meta. */
 @Component
@@ -46,6 +48,21 @@ public class MetaCloudProvider implements WhatsAppProvider {
 
     @Override
     public SendResult send(Message message, Template template) {
+        return post(MetaPayloadBuilder.build(message, template), message.getId());
+    }
+
+    @Override
+    public SendResult sendSession(String to, Map<String, Object> message, String callbackId) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("messaging_product", "whatsapp");
+        payload.put("recipient_type", "individual");
+        payload.put("to", to);
+        payload.putAll(message);
+        payload.put("biz_opaque_callback_data", callbackId);
+        return post(payload, callbackId);
+    }
+
+    private SendResult post(Map<String, Object> payload, String logId) {
         if (isBlank(meta.getAccessToken()) || isBlank(meta.getPhoneNumberId())) {
             return SendResult.permanent("NOT_CONFIGURED", "Meta access token or phone number id is not set");
         }
@@ -55,7 +72,7 @@ public class MetaCloudProvider implements WhatsAppProvider {
                     .uri(url)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + meta.getAccessToken())
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(MetaPayloadBuilder.build(message, template))
+                    .body(payload)
                     .retrieve()
                     .onStatus(status -> true, (request, resp) -> { })
                     .toEntity(String.class);
@@ -70,7 +87,7 @@ public class MetaCloudProvider implements WhatsAppProvider {
             }
             return MetaErrors.classify(status, response.getBody(), mapper);
         } catch (Exception e) {
-            log.warn("Meta send failed for message {}: {}", message.getId(), e.getMessage());
+            log.warn("Meta send failed for message {}: {}", logId, e.getMessage());
             return SendResult.retryable("NETWORK", e.getClass().getSimpleName() + ": " + e.getMessage());
         }
     }

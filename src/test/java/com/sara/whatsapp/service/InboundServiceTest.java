@@ -32,12 +32,14 @@ class InboundServiceTest {
     private final OutboundEventService outbound = mock(OutboundEventService.class);
     private final AutoReplyService autoReply = mock(AutoReplyService.class);
     private final org.springframework.data.mongodb.core.MongoTemplate mongo = mock(org.springframework.data.mongodb.core.MongoTemplate.class);
+    private final com.sara.whatsapp.bot.BotConversationService conversations = mock(com.sara.whatsapp.bot.BotConversationService.class);
+    private final com.sara.whatsapp.bot.BotEngine botEngine = mock(com.sara.whatsapp.bot.BotEngine.class);
     private final ObjectMapper mapper = new ObjectMapper();
     private InboundService service;
 
     @BeforeEach
     void setUp() {
-        service = new InboundService(repository, contacts, clients, outbound, autoReply, mongo, new WhatsAppProperties());
+        service = new InboundService(repository, contacts, clients, outbound, autoReply, mongo, conversations, botEngine, new WhatsAppProperties());
         ApiClient client = new ApiClient();
         client.setId("client-1");
         when(clients.list()).thenReturn(List.of(client));
