@@ -48,8 +48,6 @@ public class Template {
     private String metaTemplateId;
 
     private Instant syncedAt;
-    /** Fingerprint of Meta's last answer for this template, so an unchanged template is not rewritten at every sync. */
-    private String syncHash;
     private Instant createdAt;
     private Instant updatedAt;
 }

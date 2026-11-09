@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -250,6 +251,7 @@ public class TemplateService {
     public int sync() {
         int count = 0;
         int changed = 0;
+        java.util.List<String> changedNames = new java.util.ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
         for (JsonNode node : metaClient.fetchAll()) {
             String name = node.path("name").asText("");
@@ -260,14 +262,7 @@ public class TemplateService {
             Template template = repository.findByMetaTemplateId(node.path("id").asText(""))
                     .or(() -> repository.findByMetaNameAndLanguage(name, language))
                     .orElseGet(() -> newTemplate(name, language));
-            String hash = fingerprint(node);
-            if (template.getId() != null && hash.equals(template.getSyncHash())) {
-                seen.add(template.getId()); // nothing changed at Meta: no write
-                count++;
-                continue;
-            }
-            template.setSyncHash(hash);
-            changed++;
+            com.fasterxml.jackson.databind.node.ObjectNode before = snapshot(template);
             template.setMetaTemplateId(node.path("id").asText(null));
             template.setMetaName(name);
             template.setLanguage(language);
@@ -275,6 +270,17 @@ public class TemplateService {
             template.setStatus(node.path("status").asText(null));
             template.setQuality(node.path("quality_score").path("score").asText(null));
             applyComponents(template, node.path("components"));
+            // Nothing we keep has changed, and the record was refreshed recently: leave it alone, no write.
+            boolean recent = template.getSyncedAt() != null && Duration.between(template.getSyncedAt(), Instant.now()).compareTo(REFRESH_AFTER) < 0;
+            if (template.getId() != null && recent && before.equals(snapshot(template))) {
+                seen.add(template.getId());
+                count++;
+                continue;
+            }
+            changed++;
+            if (changedNames.size() < 8) {
+                changedNames.add(name);
+            }
             template.setSyncedAt(Instant.now());
             template.setUpdatedAt(Instant.now());
             repository.save(template);
@@ -284,20 +290,34 @@ public class TemplateService {
         pruneMissing(seen);
         lastSync = Instant.now();
         if (changed > 0) {
-            log.info("Synced {} templates from Meta ({} new or changed)", count, changed);
+            log.info("Synced {} templates from Meta ({} new or changed: {}{})", count, changed, String.join(", ", changedNames), changed > changedNames.size() ? ", ..." : "");
         } else {
             log.debug("Synced {} templates from Meta, none changed", count);
         }
         return count;
     }
 
-    /** A short fingerprint of what Meta said about one template. */
-    static String fingerprint(JsonNode node) {
-        try {
-            byte[] d = java.security.MessageDigest.getInstance("SHA-256").digest(node.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            return java.util.HexFormat.of().formatHex(d, 0, 12);
-        } catch (java.security.NoSuchAlgorithmException e) {
-            return String.valueOf(node.toString().hashCode());
+    /** A template that has not changed is still rewritten this often, to refresh the temporary sample links Meta gives for media headers. */
+    private static final Duration REFRESH_AFTER = Duration.ofHours(6);
+    private static final ObjectMapper SNAPSHOT = new ObjectMapper().findAndRegisterModules();
+
+    /**
+     * What we keep about a template, as plain data, for telling whether a sync changed anything. The record's own bookkeeping times are
+     * left out, and so are Meta's sample header links (header_handle), which are signed, expiring URLs that differ on every request.
+     */
+    static com.fasterxml.jackson.databind.node.ObjectNode snapshot(Template t) {
+        com.fasterxml.jackson.databind.node.ObjectNode n = SNAPSHOT.valueToTree(t);
+        n.remove(List.of("id", "syncedAt", "createdAt", "updatedAt"));
+        stripSampleLinks(n);
+        return n;
+    }
+
+    private static void stripSampleLinks(JsonNode node) {
+        if (node.isObject()) {
+            ((com.fasterxml.jackson.databind.node.ObjectNode) node).remove("header_handle");
+            node.forEach(TemplateService::stripSampleLinks);
+        } else if (node.isArray()) {
+            node.forEach(TemplateService::stripSampleLinks);
         }
     }
 
