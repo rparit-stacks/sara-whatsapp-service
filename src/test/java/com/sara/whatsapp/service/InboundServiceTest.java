@@ -30,12 +30,14 @@ class InboundServiceTest {
     private final ContactService contacts = mock(ContactService.class);
     private final ClientService clients = mock(ClientService.class);
     private final OutboundEventService outbound = mock(OutboundEventService.class);
+    private final AutoReplyService autoReply = mock(AutoReplyService.class);
+    private final org.springframework.data.mongodb.core.MongoTemplate mongo = mock(org.springframework.data.mongodb.core.MongoTemplate.class);
     private final ObjectMapper mapper = new ObjectMapper();
     private InboundService service;
 
     @BeforeEach
     void setUp() {
-        service = new InboundService(repository, contacts, clients, outbound, new WhatsAppProperties());
+        service = new InboundService(repository, contacts, clients, outbound, autoReply, mongo, new WhatsAppProperties());
         ApiClient client = new ApiClient();
         client.setId("client-1");
         when(clients.list()).thenReturn(List.of(client));
@@ -85,5 +87,15 @@ class InboundServiceTest {
 
         verify(contacts, never()).setConsent(anyString(), any(), anyString(), any());
         verify(outbound, never()).publish(anyString(), anyString(), any());
+    }
+
+    @Test
+    void anOrdinaryMessageTriggersTheAutoReplyButAStopDoesNot() throws Exception {
+        service.handle(value("hello"));
+        verify(autoReply).replyTo("919876543210");
+
+        org.mockito.Mockito.clearInvocations(autoReply);
+        service.handle(value("STOP"));
+        verify(autoReply, never()).replyTo(anyString());
     }
 }
