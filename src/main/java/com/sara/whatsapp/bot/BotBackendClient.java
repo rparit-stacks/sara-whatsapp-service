@@ -103,6 +103,28 @@ public class BotBackendClient {
         }
     }
 
+    /** One reply in an AI chat, in the customer's language. Empty means the AI had nothing to say; the backend says why, and it is logged. */
+    public String chat(String question, List<String> scopes, List<String> history) {
+        if (!configured()) {
+            log.warn("Bot AI chat skipped: BOT_SHARED_SECRET is not set on this service");
+            return "";
+        }
+        try {
+            String body = client.post().uri(url("/api/bot/answer")).header("X-Bot-Secret", bot.getSharedSecret())
+                    .body(Map.of("question", question, "scopes", scopes, "history", history == null ? List.of() : history, "mode", "chat"))
+                    .retrieve().body(String.class);
+            JsonNode n = mapper.readTree(body);
+            String text = n.path("text").asText("").strip();
+            if (text.isEmpty()) {
+                log.info("Bot AI chat gave no reply: {}", n.path("reason").asText("unknown"));
+            }
+            return text;
+        } catch (Exception e) {
+            log.warn("Bot AI chat call failed: {}", e.getMessage());
+            return "";
+        }
+    }
+
     public OrderStatus orderStatus(String phone) {
         if (!configured()) {
             return new OrderStatus(false, null, null, null);

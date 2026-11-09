@@ -188,8 +188,8 @@ public class TemplateService {
     private volatile Instant lastSync = Instant.EPOCH;
 
     /**
-     * The local records mirror Meta. They are refreshed in the background every 30 seconds and
-     * whenever the list is read, so a caller never sees a template that is gone from Meta.
+     * The local records mirror Meta. They are refreshed once at start, by Meta's status webhook, when the list is read and is more than
+     * a minute old, and by a slow background check every 30 minutes, so a caller does not see a template that is gone from Meta.
      */
     public synchronized void refreshIfStale(java.time.Duration maxAge) {
         if (java.time.Duration.between(lastSync, Instant.now()).compareTo(maxAge) < 0) {
@@ -205,14 +205,14 @@ public class TemplateService {
     }
 
     public List<Template> list() {
-        refreshIfStale(java.time.Duration.ofSeconds(5));
+        refreshIfStale(java.time.Duration.ofSeconds(60));
         return repository.findAll();
     }
 
     public Optional<Template> find(String key) {
         Optional<Template> found = repository.findByKey(key);
         if (found.isEmpty()) {
-            refreshIfStale(java.time.Duration.ofSeconds(5));
+            refreshIfStale(java.time.Duration.ofSeconds(30));
             found = repository.findByKey(key);
         }
         return found;
@@ -249,6 +249,7 @@ public class TemplateService {
     /** Pulls every template of the account from Meta and creates or updates the local copies. */
     public int sync() {
         int count = 0;
+        int changed = 0;
         java.util.Set<String> seen = new java.util.HashSet<>();
         for (JsonNode node : metaClient.fetchAll()) {
             String name = node.path("name").asText("");
@@ -259,6 +260,14 @@ public class TemplateService {
             Template template = repository.findByMetaTemplateId(node.path("id").asText(""))
                     .or(() -> repository.findByMetaNameAndLanguage(name, language))
                     .orElseGet(() -> newTemplate(name, language));
+            String hash = fingerprint(node);
+            if (template.getId() != null && hash.equals(template.getSyncHash())) {
+                seen.add(template.getId()); // nothing changed at Meta: no write
+                count++;
+                continue;
+            }
+            template.setSyncHash(hash);
+            changed++;
             template.setMetaTemplateId(node.path("id").asText(null));
             template.setMetaName(name);
             template.setLanguage(language);
@@ -274,8 +283,22 @@ public class TemplateService {
         }
         pruneMissing(seen);
         lastSync = Instant.now();
-        log.info("Synced {} templates from Meta", count);
+        if (changed > 0) {
+            log.info("Synced {} templates from Meta ({} new or changed)", count, changed);
+        } else {
+            log.debug("Synced {} templates from Meta, none changed", count);
+        }
         return count;
+    }
+
+    /** A short fingerprint of what Meta said about one template. */
+    static String fingerprint(JsonNode node) {
+        try {
+            byte[] d = java.security.MessageDigest.getInstance("SHA-256").digest(node.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(d, 0, 12);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            return String.valueOf(node.toString().hashCode());
+        }
     }
 
     /**

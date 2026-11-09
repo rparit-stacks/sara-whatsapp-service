@@ -59,7 +59,7 @@ class BotAiChatTest {
 
     @Test
     void reachingTheOutcomeAnswersAndStartsTheChat() {
-        when(backend.answer(anyString(), anyList(), anyList())).thenReturn("Yes, we have cotton in many weights.");
+        when(backend.chat(anyString(), anyList(), anyList())).thenReturn("Yes, we have cotton in many weights.");
         assertEquals(1, engine.handle(PHONE, "Priya", "do you have cotton", false));
         assertEquals(List.of("ai_chat"), outcomesSent());
         verify(conversations).startAiChat(eq(PHONE), eq(List.of("products", "fabrics")), any(Instant.class));
@@ -68,7 +68,7 @@ class BotAiChatTest {
 
     @Test
     void whenTheAiCannotAnswerTheFirstTimeThePersonGoesToTheApp() {
-        when(backend.answer(anyString(), anyList(), anyList())).thenReturn("");
+        when(backend.chat(anyString(), anyList(), anyList())).thenReturn("");
         engine.handle(PHONE, "Priya", "something odd", false);
         assertEquals(List.of("ai_chat"), outcomesSent()); // the app link is logged under the outcome that produced it
         verify(conversations, never()).startAiChat(anyString(), anyList(), any(Instant.class));
@@ -78,7 +78,7 @@ class BotAiChatTest {
     void whileTheChatRunsTheAiAnswersWithoutRoutingAndKeepsTheHistory() {
         var chat = new BotConversationService.AiChat(List.of("products"), 1, List.of("Q: cotton?", "A: Yes."));
         when(conversations.aiChat(anyString(), any(Instant.class))).thenReturn(Optional.of(chat));
-        when(backend.answer("and in silk?", List.of("products"), List.of("Q: cotton?", "A: Yes."))).thenReturn("Silk too, from our silk range.");
+        when(backend.chat("and in silk?", List.of("products"), List.of("Q: cotton?", "A: Yes."))).thenReturn("Silk too, from our silk range.");
         assertEquals(1, engine.handle(PHONE, "Priya", "and in silk?", false));
         verify(backend, never()).route(anyString(), anyList());
         assertEquals(List.of("ai_chat"), outcomesSent());
@@ -89,7 +89,7 @@ class BotAiChatTest {
     void whenTheAiIsNotSureTheTeamIsToldAndTheChatEnds() {
         var chat = new BotConversationService.AiChat(List.of("products"), 2, List.of());
         when(conversations.aiChat(anyString(), any(Instant.class))).thenReturn(Optional.of(chat));
-        when(backend.answer(anyString(), anyList(), anyList())).thenReturn("");
+        when(backend.chat(anyString(), anyList(), anyList())).thenReturn("");
         engine.handle(PHONE, "Priya", "I want a refund for order 55", false);
         verify(backend).notifyTeam(PHONE, "I want a refund for order 55");
         verify(conversations).endAiChat(PHONE);
@@ -100,7 +100,7 @@ class BotAiChatTest {
     void theMainMenuButtonEndsTheChatAndGoesBackToTheFlow() {
         var chat = new BotConversationService.AiChat(List.of("products"), 1, List.of());
         when(conversations.aiChat(anyString(), any(Instant.class))).thenReturn(Optional.of(chat));
-        when(backend.answer(anyString(), anyList(), anyList())).thenReturn("Here you go.");
+        when(backend.chat(anyString(), anyList(), anyList())).thenReturn("Here you go.");
         engine.handle(PHONE, "Priya", "Main menu", false);
         verify(conversations).endAiChat(PHONE);
     }

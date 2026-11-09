@@ -174,7 +174,7 @@ public class BotEngine {
                         case "ai_chat" -> {
                             List<String> scopes = new ArrayList<>();
                             d.path("scopes").forEach(x -> scopes.add(x.asText()));
-                            String a = conversations.reserveAiCall(phone, bot.getDailyAiCap()) ? backend.answer(text, scopes, List.of()) : "";
+                            String a = conversations.reserveAiCall(phone, bot.getDailyAiCap()) ? backend.chat(text, scopes, List.of()) : "";
                             if (a.isBlank()) {
                                 r = BotOutcomes.openApp(name, "/ask", base); // the AI could not help: the app can, and it is free
                             } else {
@@ -247,7 +247,7 @@ public class BotEngine {
             conversations.endAiChat(phone);
             return sender.send(phone, BotOutcomes.openApp(name, "/ask", base).payload(), "ai_chat").sent() ? 1 : 0;
         }
-        String a = backend.answer(text, chat.scopes(), chat.turns());
+        String a = backend.chat(text, chat.scopes(), chat.turns());
         if (a.isBlank()) {
             backend.notifyTeam(phone, text);
             conversations.endAiChat(phone);
