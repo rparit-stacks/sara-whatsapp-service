@@ -1,5 +1,6 @@
 package com.sara.whatsapp.service;
 
+import com.sara.whatsapp.worker.WorkSignal;
 import com.sara.whatsapp.domain.ApiClient;
 import com.sara.whatsapp.domain.OutboundEvent;
 import com.sara.whatsapp.repo.OutboundEventRepository;
@@ -14,10 +15,12 @@ public class OutboundEventService {
 
     private final ClientService clients;
     private final OutboundEventRepository repository;
+    private final WorkSignal signal;
 
-    public OutboundEventService(ClientService clients, OutboundEventRepository repository) {
+    public OutboundEventService(ClientService clients, OutboundEventRepository repository, WorkSignal signal) {
         this.clients = clients;
         this.repository = repository;
+        this.signal = signal;
     }
 
     public void publish(String clientId, String type, Map<String, Object> data) {
@@ -39,5 +42,6 @@ public class OutboundEventService {
         event.setNextAttemptAt(Instant.now());
         event.setCreatedAt(Instant.now());
         repository.save(event);
+        signal.wake(WorkSignal.Kind.EVENTS);
     }
 }

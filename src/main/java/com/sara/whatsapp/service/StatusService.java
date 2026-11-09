@@ -1,5 +1,6 @@
 package com.sara.whatsapp.service;
 
+import com.sara.whatsapp.worker.WorkSignal;
 import com.mongodb.client.result.UpdateResult;
 import com.sara.whatsapp.domain.Message;
 import com.sara.whatsapp.domain.MessageEvent;
@@ -32,13 +33,15 @@ public class StatusService {
     private final MessageRepository messages;
     private final MessageEventRepository events;
     private final OutboundEventService outbound;
+    private final WorkSignal signal;
 
     public StatusService(MongoTemplate mongo, MessageRepository messages, MessageEventRepository events,
-                         OutboundEventService outbound) {
+                         OutboundEventService outbound, WorkSignal signal) {
         this.mongo = mongo;
         this.messages = messages;
         this.events = events;
         this.outbound = outbound;
+        this.signal = signal;
     }
 
     /** Worker: the provider accepted the message. Only the worker holding the lock may do this. */
@@ -79,6 +82,7 @@ public class StatusService {
         UpdateResult result = mongo.updateFirst(ownedQuery(m), update, Message.class);
         if (result.getModifiedCount() > 0) {
             recordEvent(m.getId(), "RETRY_SCHEDULED", now, code, message);
+            signal.wakeFor(WorkSignal.Kind.DISPATCH, next); // look again when the retry falls due
         }
     }
 

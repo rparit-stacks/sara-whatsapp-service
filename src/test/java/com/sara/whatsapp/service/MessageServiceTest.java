@@ -51,7 +51,7 @@ class MessageServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new MessageService(messages, templates, bindings, status, contacts, mongo, new WhatsAppProperties());
+        service = new MessageService(messages, templates, bindings, status, contacts, mongo, new WhatsAppProperties(), mock(com.sara.whatsapp.worker.WorkSignal.class));
         client = new ApiClient();
         client.setId("client-1");
         when(contacts.consentOf(anyString())).thenReturn(com.sara.whatsapp.domain.ConsentStatus.UNKNOWN);

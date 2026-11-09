@@ -1,5 +1,6 @@
 package com.sara.whatsapp.service;
 
+import com.sara.whatsapp.worker.WorkSignal;
 import com.sara.whatsapp.api.ApiException;
 import com.sara.whatsapp.config.WhatsAppProperties;
 import com.sara.whatsapp.domain.ApiClient;
@@ -53,15 +54,17 @@ public class BroadcastService {
     private final OutboundEventService outbound;
     private final MongoTemplate mongo;
     private final WhatsAppProperties.Broadcast config;
+    private final WorkSignal signal;
 
     public BroadcastService(BroadcastRepository broadcasts, TemplateRepository templates, MessageService messageService,
-                            OutboundEventService outbound, MongoTemplate mongo, WhatsAppProperties props) {
+                            OutboundEventService outbound, MongoTemplate mongo, WhatsAppProperties props, WorkSignal signal) {
         this.broadcasts = broadcasts;
         this.templates = templates;
         this.messageService = messageService;
         this.outbound = outbound;
         this.mongo = mongo;
         this.config = props.getBroadcast();
+        this.signal = signal;
     }
 
     public Broadcast create(ApiClient client, CreateRequest request) {
@@ -71,7 +74,16 @@ public class BroadcastService {
         broadcast.setCreatedBy(client.getName());
         broadcast.setCreatedAt(now);
         apply(broadcast, request);
-        return broadcasts.save(broadcast);
+        Broadcast saved = broadcasts.save(broadcast);
+        wakeForSchedule(saved);
+        return saved;
+    }
+
+    /** A scheduled broadcast needs the worker awake when it falls due. */
+    private void wakeForSchedule(Broadcast b) {
+        if (b.getStatus() == Broadcast.Status.SCHEDULED && b.getScheduledAt() != null) {
+            signal.wakeFor(WorkSignal.Kind.BROADCAST, b.getScheduledAt());
+        }
     }
 
     /** Changes a broadcast that has not started yet (DRAFT or SCHEDULED). */
@@ -81,7 +93,9 @@ public class BroadcastService {
             throw ApiException.unprocessable("NOT_EDITABLE", "Only a DRAFT or SCHEDULED broadcast can be edited");
         }
         apply(broadcast, request);
-        return broadcasts.save(broadcast);
+        Broadcast saved = broadcasts.save(broadcast);
+        wakeForSchedule(saved);
+        return saved;
     }
 
     /** Validates the request and writes it onto the broadcast. */
@@ -150,6 +164,9 @@ public class BroadcastService {
         if (changed == 0) {
             throw ApiException.unprocessable(code, message);
         }
+        if (to == Broadcast.Status.RUNNING) {
+            signal.wake(WorkSignal.Kind.BROADCAST);
+        }
         return broadcasts.findById(id).orElse(b);
     }
 
@@ -176,6 +193,7 @@ public class BroadcastService {
         if (changed == 0) {
             throw ApiException.unprocessable("NOT_STARTABLE", "Only a DRAFT or SCHEDULED broadcast can be started");
         }
+        signal.wake(WorkSignal.Kind.BROADCAST);
         return broadcasts.findById(id).orElse(b);
     }
 

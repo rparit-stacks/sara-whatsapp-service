@@ -1,5 +1,6 @@
 package com.sara.whatsapp.service;
 
+import com.sara.whatsapp.worker.WorkSignal;
 import com.sara.whatsapp.api.ApiException;
 import com.sara.whatsapp.api.dto.SendMessageRequest;
 import com.sara.whatsapp.config.WhatsAppProperties;
@@ -51,9 +52,10 @@ public class MessageService {
     private final ContactService contacts;
     private final MongoTemplate mongo;
     private final WhatsAppProperties props;
+    private final WorkSignal signal;
 
     public MessageService(MessageRepository messages, TemplateRepository templates, EventBindingRepository bindings,
-                          StatusService status, ContactService contacts, MongoTemplate mongo, WhatsAppProperties props) {
+                          StatusService status, ContactService contacts, MongoTemplate mongo, WhatsAppProperties props, WorkSignal signal) {
         this.messages = messages;
         this.templates = templates;
         this.bindings = bindings;
@@ -61,6 +63,7 @@ public class MessageService {
         this.contacts = contacts;
         this.mongo = mongo;
         this.props = props;
+        this.signal = signal;
     }
 
     public QueueResult queue(ApiClient client, SendMessageRequest request) {
@@ -121,6 +124,7 @@ public class MessageService {
             return new QueueResult(messages.findByClientIdAndClientMessageId(client.getId(), request.clientMessageId())
                     .orElseThrow(() -> e), true);
         }
+        signal.wakeFor(WorkSignal.Kind.DISPATCH, saved.getNextAttemptAt()); // a message is waiting: send it now (or when it falls due)
         if (skipReason != null) {
             status.skip(saved.getId(), skipReason);
             saved = messages.findById(saved.getId()).orElse(saved);
@@ -164,6 +168,7 @@ public class MessageService {
         } catch (DuplicateKeyException e) {
             return;
         }
+        signal.wakeFor(WorkSignal.Kind.DISPATCH, saved.getNextAttemptAt());
         if (skipReason != null) {
             status.skip(saved.getId(), skipReason);
         }
@@ -239,6 +244,7 @@ public class MessageService {
                 new Update().set("status", MessageStatus.QUEUED).set("attempts", 0).set("nextAttemptAt", now)
                         .set("updatedAt", now).unset("errorCode").unset("errorMessage"),
                 Message.class);
+        signal.wake(WorkSignal.Kind.DISPATCH);
         return messages.findById(id).orElse(message);
     }
 

@@ -39,7 +39,7 @@ class BroadcastServiceTest {
     @BeforeEach
     void setUp() {
         service = new BroadcastService(broadcasts, templates, messageService, mock(OutboundEventService.class),
-                mongo, new WhatsAppProperties());
+                mongo, new WhatsAppProperties(), mock(com.sara.whatsapp.worker.WorkSignal.class));
         client = new ApiClient();
         client.setId("client-1");
         client.setName("studio-sara");

@@ -16,7 +16,8 @@ import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
-import org.springframework.scheduling.annotation.Scheduled;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -43,50 +44,70 @@ public class EventPublisherWorker {
     private final ClientService clients;
     private final ObjectMapper mapper;
     private final WhatsAppProperties.Events config;
+    private final WorkSignal signal;
     private final RestClient http;
 
-    public EventPublisherWorker(MongoTemplate mongo, ClientService clients, ObjectMapper mapper, WhatsAppProperties props) {
+    public EventPublisherWorker(MongoTemplate mongo, ClientService clients, ObjectMapper mapper, WhatsAppProperties props, WorkSignal signal) {
         this.mongo = mongo;
         this.clients = clients;
         this.mapper = mapper;
         this.config = props.getEvents();
+        this.signal = signal;
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
         factory.setReadTimeout(Duration.ofSeconds(10));
         this.http = RestClient.builder().requestFactory(factory).build();
     }
 
-    /** With no events waiting, the database is asked again every five seconds; stuck events are freed every 30. */
-    private static final long IDLE_MS = 5000;
-    private static final long LEASE_CHECK_MS = 30_000;
-    private volatile long pollAfter = 0;
-    private volatile long leaseCheckAfter = 0;
+    /** Safety net sleep with nothing signalled; stuck events are freed on the same rhythm. */
+    private static final long SAFETY_MS = 30_000;
+    private volatile boolean running = true;
 
-    @Scheduled(fixedDelay = 2000)
-    public void tick() {
-        long clock = System.currentTimeMillis();
-        if (clock < pollAfter) {
-            return;
+    @PostConstruct
+    void start() {
+        Thread t = new Thread(this::loop, "event-publisher");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    @PreDestroy
+    void stop() {
+        running = false;
+        signal.wake(WorkSignal.Kind.EVENTS);
+    }
+
+    /** Sleeps until an event is published (or a retry falls due), delivers what is waiting, and goes back to sleep. */
+    private void loop() {
+        while (running) {
+            try {
+                if (!tick()) {
+                    signal.await(WorkSignal.Kind.EVENTS, SAFETY_MS);
+                }
+            } catch (Exception e) {
+                log.error("Event publisher loop failed, trying again in a moment", e);
+                signal.await(WorkSignal.Kind.EVENTS, 5_000);
+            }
         }
+    }
+
+    /** Frees events whose worker died, then delivers up to a batch. True when it delivered any and should look again. */
+    boolean tick() {
         Instant now = Instant.now();
-        if (clock >= leaseCheckAfter) {
-            leaseCheckAfter = clock + LEASE_CHECK_MS;
-            mongo.updateMulti(
-                    new Query(Criteria.where("status").is(OutboundEvent.Status.SENDING).and("lockedUntil").lt(now)),
-                    new Update().set("status", OutboundEvent.Status.PENDING).set("nextAttemptAt", now).unset("lockedUntil"),
-                    OutboundEvent.class);
-        }
+        mongo.updateMulti(
+                new Query(Criteria.where("status").is(OutboundEvent.Status.SENDING).and("lockedUntil").lt(now)),
+                new Update().set("status", OutboundEvent.Status.PENDING).set("nextAttemptAt", now).unset("lockedUntil"),
+                OutboundEvent.class);
 
+        int delivered = 0;
         for (int i = 0; i < PER_TICK; i++) {
             OutboundEvent event = claim();
             if (event == null) {
-                if (i == 0) {
-                    pollAfter = System.currentTimeMillis() + IDLE_MS;
-                }
-                return;
+                break;
             }
             deliver(event);
+            delivered++;
         }
+        return delivered == PER_TICK;
     }
 
     private OutboundEvent claim() {
@@ -139,11 +160,13 @@ public class EventPublisherWorker {
         }
         long base = (long) config.getBaseBackoffSeconds() << Math.min(Math.max(event.getAttempts() - 1, 0), 20);
         long delay = Math.min(base, config.getMaxBackoffSeconds());
+        Instant next = Instant.now().plusSeconds(delay);
         mongo.updateFirst(new Query(Criteria.where("_id").is(event.getId())),
                 new Update().set("status", OutboundEvent.Status.PENDING)
-                        .set("nextAttemptAt", Instant.now().plusSeconds(delay))
+                        .set("nextAttemptAt", next)
                         .set("lastError", error).unset("lockedUntil"),
                 OutboundEvent.class);
+        signal.wakeFor(WorkSignal.Kind.EVENTS, next);
     }
 
     private void finish(OutboundEvent event, OutboundEvent.Status status, String error) {

@@ -29,8 +29,8 @@ public class SweeperJob {
         this.status = status;
     }
 
-    /** Housekeeping, not delivery: every 30 seconds is plenty. */
-    @Scheduled(fixedDelay = 30_000)
+    /** Housekeeping, not delivery: once a minute is plenty. */
+    @Scheduled(fixedDelay = 60_000)
     public void sweep() {
         Instant now = Instant.now();
 
