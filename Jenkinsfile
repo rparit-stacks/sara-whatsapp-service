@@ -1,3 +1,4 @@
+// Trigger: push to main -> GitHub webhook -> local Jenkins builds the JAR -> deploys to VPS (jar-only, PM2).
 pipeline {
     agent any
 
