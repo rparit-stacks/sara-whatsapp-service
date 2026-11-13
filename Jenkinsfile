@@ -60,7 +60,7 @@ pipeline {
                             if pm2 describe ${PM2_APP_NAME} > /dev/null 2>&1; then
                                 pm2 restart ${PM2_APP_NAME} --update-env
                             else
-                                pm2 start doppler --name ${PM2_APP_NAME} --interpreter none -- run -- java -jar ${DEPLOY_DIR}/target/${JAR_NAME}
+                                cd ${DEPLOY_DIR} && pm2 start doppler --name ${PM2_APP_NAME} --interpreter none -- run -- java -jar ${DEPLOY_DIR}/target/${JAR_NAME}
                             fi
                             pm2 save
                         '
